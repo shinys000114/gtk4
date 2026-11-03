@@ -1,0 +1,139 @@
+From b5eb79f0be7e691d8367997d3b19f4e158503914 Mon Sep 17 00:00:00 2001
+From: Benjamin Otte <otte@redhat.com>
+Date: Tue, 29 Sep 2026 01:19:32 +0200
+Subject: [PATCH] gl: Create 2 fbos per frame instead of 1 per image
+
+fbos need to be GLContext-local, and images are reused across contexts
+as each renderer has its own context and in particular the device which
+is doing the GCing has its own context.
+
+Previously the fbos would just accumulate until the renderer was no
+longer used.
+
+Fixes: !10377
+Part-of: <https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/10423>
+---
+ gsk/gpu/gskglframe.c         | 4 ++++
+ gsk/gpu/gskglimage.c         | 8 ++------
+ gsk/gpu/gskglimageprivate.h  | 1 +
+ gsk/gpu/gskgpublitop.c       | 8 ++++++--
+ gsk/gpu/gskgpuopprivate.h    | 1 +
+ gsk/gpu/gskgpurenderpassop.c | 4 +++-
+ 6 files changed, 17 insertions(+), 9 deletions(-)
+
+diff --git a/gsk/gpu/gskglframe.c b/gsk/gpu/gskglframe.c
+index 7ecad85d9cf..6abc4079bca 100644
+--- a/gsk/gpu/gskglframe.c
++++ b/gsk/gpu/gskglframe.c
+@@ -314,6 +314,8 @@ gsk_gl_frame_submit (GskGpuFrame       *frame,
+   glDisable (GL_DEPTH_TEST);
+   glEnable (GL_BLEND);
+ 
++  glGenFramebuffers (G_N_ELEMENTS (state.fbos), state.fbos);
++
+   if (vertex_buffer)
+     gsk_gl_buffer_bind (GSK_GL_BUFFER (vertex_buffer));
+ 
+@@ -323,6 +325,8 @@ gsk_gl_frame_submit (GskGpuFrame       *frame,
+     }
+ 
+   self->sync = glFenceSync (GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
++
++  glDeleteFramebuffers (G_N_ELEMENTS (state.fbos), state.fbos);
+ }
+ 
+ static void
+diff --git a/gsk/gpu/gskglimage.c b/gsk/gpu/gskglimage.c
+index 633ce9cfcc7..100584a9c34 100644
+--- a/gsk/gpu/gskglimage.c
++++ b/gsk/gpu/gskglimage.c
+@@ -62,10 +62,6 @@ gsk_gl_image_finalize (GObject *object)
+   GskGLImage *self = GSK_GL_IMAGE (object);
+   gsize n_textures = gsk_gl_image_get_n_textures (self);
+ 
+-
+-  if (self->texture_id[0] && self->framebuffer_id)
+-    glDeleteFramebuffers (1, &self->framebuffer_id);
+-
+   if (self->owns_texture)
+     glDeleteTextures (n_textures, self->texture_id);
+ 
+@@ -388,6 +384,7 @@ gsk_gl_image_bind_textures (GskGLImage *self,
+ 
+ void
+ gsk_gl_image_bind_framebuffer (GskGLImage *self,
++                               GLuint      fbo,
+                                GLenum      target)
+ {
+   GLenum status;
+@@ -407,8 +404,7 @@ gsk_gl_image_bind_framebuffer (GskGLImage *self,
+ 
+   g_assert (self->texture_id[1] == 0);
+ 
+-  glGenFramebuffers (1, &self->framebuffer_id);
+-  glBindFramebuffer (target, self->framebuffer_id);
++  glBindFramebuffer (target, fbo);
+   glFramebufferTexture2D (target, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, self->texture_id[0], 0);
+   status = glCheckFramebufferStatus (target);
+ 
+diff --git a/gsk/gpu/gskglimageprivate.h b/gsk/gpu/gskglimageprivate.h
+index 235ef077e4a..5e6a15adc5e 100644
+--- a/gsk/gpu/gskglimageprivate.h
++++ b/gsk/gpu/gskglimageprivate.h
+@@ -36,6 +36,7 @@ GskGpuImage *           gsk_gl_image_new_for_texture                    (GskGLDe
+ void                    gsk_gl_image_bind_textures                      (GskGLImage             *self,
+                                                                          GLenum                  target);
+ void                    gsk_gl_image_bind_framebuffer                   (GskGLImage             *self,
++                                                                         GLuint                  fbo,
+                                                                          GLenum                  target);
+ 
+ gboolean                gsk_gl_image_is_flipped                         (GskGLImage             *self);
+diff --git a/gsk/gpu/gskgpublitop.c b/gsk/gpu/gskgpublitop.c
+index f4bc9cef892..3aeb008494f 100644
+--- a/gsk/gpu/gskgpublitop.c
++++ b/gsk/gpu/gskgpublitop.c
+@@ -153,8 +153,12 @@ gsk_gpu_blit_op_gl_command (GskGpuOp          *op,
+   GskGpuBlitOp *self = (GskGpuBlitOp *) op;
+   GLenum filter;
+ 
+-  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->src_image), GL_READ_FRAMEBUFFER);
+-  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->dest_image), GL_DRAW_FRAMEBUFFER);
++  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->src_image),
++                                 state->fbos[1],
++                                 GL_READ_FRAMEBUFFER);
++  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->dest_image),
++                                 state->fbos[0],
++                                 GL_DRAW_FRAMEBUFFER);
+ 
+   switch (self->filter)
+     {
+diff --git a/gsk/gpu/gskgpuopprivate.h b/gsk/gpu/gskgpuopprivate.h
+index 422176f0142..0d00ed7a157 100644
+--- a/gsk/gpu/gskgpuopprivate.h
++++ b/gsk/gpu/gskgpuopprivate.h
+@@ -29,6 +29,7 @@ struct _GskGLCommandState
+     GskGpuColorStates color_states;
+     guint32 variation;
+   } current_program;
++  GLuint fbos[2];
+   GskGpuBuffer *globals;
+   GskGpuImage *current_images[2];
+   GskGpuSampler current_samplers[2];
+diff --git a/gsk/gpu/gskgpurenderpassop.c b/gsk/gpu/gskgpurenderpassop.c
+index 8a94b32f42e..0589985758c 100644
+--- a/gsk/gpu/gskgpurenderpassop.c
++++ b/gsk/gpu/gskgpurenderpassop.c
+@@ -207,7 +207,9 @@ gsk_gpu_render_pass_op_gl_command (GskGpuOp          *op,
+   /* nesting frame passes not allowed */
+   g_assert (state->flip_y == 0);
+ 
+-  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->target), GL_FRAMEBUFFER);
++  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->target),
++                                 state->fbos[0],
++                                 GL_FRAMEBUFFER);
+ 
+   if (gsk_gl_image_is_flipped (GSK_GL_IMAGE (self->target)))
+     state->flip_y = gsk_gpu_image_get_height (self->target);
+-- 
+GitLab
+

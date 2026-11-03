@@ -1,3 +1,12 @@
+gtk4 (4.22.4+ds-0ubuntu0.1+c5fbo1) resolute; urgency=medium
+
+  * Backport upstream 3248fb80 and b5eb79f0 (MR !10423): create two FBOs per
+    frame in the GL context in use instead of one per image, so images
+    finalized from another context no longer leak their FBO and texture
+    (fixed in GTK 4.24.1). ODROID-C5 libMali build.
+
+ -- YoungSoo Shin <shinys000114@gmail.com>  Tue, 03 Nov 2026 12:30:00 +0900
+
 gtk4 (4.22.4+ds-0ubuntu0.1) resolute; urgency=medium
 
   [ Alessandro Astone ]

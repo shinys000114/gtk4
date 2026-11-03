@@ -1,0 +1,86 @@
+From 3248fb80591a8bafedf7f589254003447e5ce9a4 Mon Sep 17 00:00:00 2001
+From: Benjamin Otte <otte@redhat.com>
+Date: Tue, 29 Sep 2026 01:06:12 +0200
+Subject: [PATCH] gl: Simplify
+
+Part-of: <https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/10423>
+---
+ gsk/gpu/gskglimage.c         | 10 ++--------
+ gsk/gpu/gskglimageprivate.h  |  3 +--
+ gsk/gpu/gskgpublitop.c       |  4 ++--
+ gsk/gpu/gskgpurenderpassop.c |  2 +-
+ 4 files changed, 6 insertions(+), 13 deletions(-)
+
+diff --git a/gsk/gpu/gskglimage.c b/gsk/gpu/gskglimage.c
+index 54e30d28b7a..633ce9cfcc7 100644
+--- a/gsk/gpu/gskglimage.c
++++ b/gsk/gpu/gskglimage.c
+@@ -387,8 +387,8 @@ gsk_gl_image_bind_textures (GskGLImage *self,
+ }
+ 
+ void
+-gsk_gl_image_bind_framebuffer_target (GskGLImage *self,
+-                                      GLenum      target)
++gsk_gl_image_bind_framebuffer (GskGLImage *self,
++                               GLenum      target)
+ {
+   GLenum status;
+ 
+@@ -439,12 +439,6 @@ gsk_gl_image_bind_framebuffer_target (GskGLImage *self,
+     }
+ }
+ 
+-void
+-gsk_gl_image_bind_framebuffer (GskGLImage *self)
+-{
+-  gsk_gl_image_bind_framebuffer_target (self, GL_FRAMEBUFFER);
+-}
+-
+ gboolean
+ gsk_gl_image_is_flipped (GskGLImage *self)
+ {
+diff --git a/gsk/gpu/gskglimageprivate.h b/gsk/gpu/gskglimageprivate.h
+index d2311eb34aa..235ef077e4a 100644
+--- a/gsk/gpu/gskglimageprivate.h
++++ b/gsk/gpu/gskglimageprivate.h
+@@ -35,8 +35,7 @@ GskGpuImage *           gsk_gl_image_new_for_texture                    (GskGLDe
+ 
+ void                    gsk_gl_image_bind_textures                      (GskGLImage             *self,
+                                                                          GLenum                  target);
+-void                    gsk_gl_image_bind_framebuffer                   (GskGLImage             *self);
+-void                    gsk_gl_image_bind_framebuffer_target            (GskGLImage             *self,
++void                    gsk_gl_image_bind_framebuffer                   (GskGLImage             *self,
+                                                                          GLenum                  target);
+ 
+ gboolean                gsk_gl_image_is_flipped                         (GskGLImage             *self);
+diff --git a/gsk/gpu/gskgpublitop.c b/gsk/gpu/gskgpublitop.c
+index 5982c156a2d..f4bc9cef892 100644
+--- a/gsk/gpu/gskgpublitop.c
++++ b/gsk/gpu/gskgpublitop.c
+@@ -153,8 +153,8 @@ gsk_gpu_blit_op_gl_command (GskGpuOp          *op,
+   GskGpuBlitOp *self = (GskGpuBlitOp *) op;
+   GLenum filter;
+ 
+-  gsk_gl_image_bind_framebuffer_target (GSK_GL_IMAGE (self->src_image), GL_READ_FRAMEBUFFER);
+-  gsk_gl_image_bind_framebuffer_target (GSK_GL_IMAGE (self->dest_image), GL_DRAW_FRAMEBUFFER);
++  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->src_image), GL_READ_FRAMEBUFFER);
++  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->dest_image), GL_DRAW_FRAMEBUFFER);
+ 
+   switch (self->filter)
+     {
+diff --git a/gsk/gpu/gskgpurenderpassop.c b/gsk/gpu/gskgpurenderpassop.c
+index 2deeedb5842..8a94b32f42e 100644
+--- a/gsk/gpu/gskgpurenderpassop.c
++++ b/gsk/gpu/gskgpurenderpassop.c
+@@ -207,7 +207,7 @@ gsk_gpu_render_pass_op_gl_command (GskGpuOp          *op,
+   /* nesting frame passes not allowed */
+   g_assert (state->flip_y == 0);
+ 
+-  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->target));
++  gsk_gl_image_bind_framebuffer (GSK_GL_IMAGE (self->target), GL_FRAMEBUFFER);
+ 
+   if (gsk_gl_image_is_flipped (GSK_GL_IMAGE (self->target)))
+     state->flip_y = gsk_gpu_image_get_height (self->target);
+-- 
+GitLab
+

@@ -20,3 +20,5 @@ print-Fix-listing-printers-with-synchronous-backends.patch
 gtkapplication-wayland-Add-a-missing-NULL-check-when-forg.patch
 gskvulkanimage-fix-building-on-32-bit.patch
 dragsource-Fix-memory-corruption-due-to-uncancelled-sourc.patch
+gl-Simplify.patch
+gl-Create-2-fbos-per-frame-instead-of-1-per-image.patch
