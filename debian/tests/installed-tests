@@ -1,0 +1,34 @@
+#!/bin/sh
+# autopkgtest check: Run the installed-tests to verify GTK works correctly
+# Based on glib2.0's d/tests/installed-tests, (C) 2013 Canonical Ltd.
+
+set -eu
+
+namespace=gtk-4.0/
+
+# Disable gvfs if it happens to be installed. We want to test the built-in
+# stuff
+export GIO_USE_VFS=local
+export GIO_USE_VOLUME_MONITOR=unix
+
+# The powervr vulkan driver emits warnings when it isn't used
+export VK_LOADER_DRIVERS_DISABLE="*power*"
+
+export XDG_RUNTIME_DIR="$AUTOPKGTEST_TMP"
+export HOME="$AUTOPKGTEST_TMP"
+
+# https://gitlab.gnome.org/GNOME/gtk/-/commit/1765e1b7c
+export GTK_DEBUG=css
+
+exec dbus-run-session -- \
+debian/tests/run-with-display "$GDK_BACKEND" \
+debian/tests/run-with-locales \
+    --generate de_DE.UTF-8 \
+    --generate en_GB.UTF-8 \
+    --generate en_US.UTF-8 \
+    --generate sv_SE=ISO-8859-1 \
+    -- \
+gnome-desktop-testing-runner \
+--report-directory="$AUTOPKGTEST_ARTIFACTS" \
+--tap \
+"$namespace"

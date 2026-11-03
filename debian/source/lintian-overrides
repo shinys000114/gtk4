@@ -1,0 +1,2 @@
+# Exported by d/rules
+dh-exec-subst-unknown-variable env:DOC_PKG *
